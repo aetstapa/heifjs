@@ -59,7 +59,7 @@ jobs:
         run: |
           cd $SRC_DIR
           chmod +x ./scripts/install-emscripten.sh
-          ./scripts/install-emscripten.sh
+          ./scripts/install-emscripten.sh 5.0.5 .
           source ./emsdk/emsdk_env.sh
 
           # 持久化到后续 step
