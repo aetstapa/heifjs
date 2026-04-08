@@ -79,7 +79,7 @@ jobs:
           echo "EMSDK=$PWD/emsdk" >> $GITHUB_ENV
           echo "EM_CONFIG=$PWD/emsdk/.emscripten" >> $GITHUB_ENV
 
-      # 5. 编译 libheif
+      # 5. 编译 libheif wasm
       - name: Build libheif WASM
         working-directory: ${{ env.SRC_DIR }}
         run: |
