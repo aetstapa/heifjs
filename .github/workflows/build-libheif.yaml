@@ -3,36 +3,58 @@ name: Build libheif WASM
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     env:
+      # 默认版本，可通过 workflow_dispatch 覆盖
       LIBHEIF_VERSION: ""
 
     steps:
+      # 1. Checkout
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # 2. 获取最新 release 并设置 SRC_DIR
       - name: Get latest libheif release
         id: get_release
         run: |
+          # 如果未指定版本，就获取最新 release
           if [ -z "$LIBHEIF_VERSION" ]; then
             LATEST=$(curl -s https://api.github.com/repos/strukturag/libheif/releases/latest | jq -r .tag_name)
           else
             LATEST="$LIBHEIF_VERSION"
           fi
+
+          if [ -z "$LATEST" ] || [ "$LATEST" = "null" ]; then
+            echo "Error: Could not fetch latest libheif release!"
+            exit 1
+          fi
+
+          VERSION=${LATEST#v}  # 去掉前缀 v
+          SRC_DIR="libheif-${VERSION}"
+
           echo "LATEST_VERSION=$LATEST" >> $GITHUB_ENV
-          echo "SRC_DIR=libheif-${LATEST_VERSION#v}" >> $GITHUB_ENV
-          echo "Latest libheif version: $LATEST"
+          echo "SRC_DIR=$SRC_DIR" >> $GITHUB_ENV
 
-      - name: Download libheif source
+          echo "Latest release: $LATEST"
+          echo "Source directory: $SRC_DIR"
+
+      # 3. 下载并解压源码，检查目录存在
+      - name: Download and extract libheif
         run: |
-          VERSION=${LATEST_VERSION#v}
-          wget https://github.com/strukturag/libheif/releases/download/${LATEST_VERSION}/libheif-${VERSION}.tar.gz
-          tar -xzf libheif-${VERSION}.tar.gz
+          wget https://github.com/strukturag/libheif/releases/download/${LATEST_VERSION}/libheif-${LATEST_VERSION#v}.tar.gz
+          tar -xzf libheif-${LATEST_VERSION#v}.tar.gz
 
+          if [ ! -d "$SRC_DIR" ]; then
+            echo "Error: extracted directory $SRC_DIR not found!"
+            exit 1
+          fi
+
+      # 4. 安装 Emscripten 并持久化环境变量
       - name: Install Emscripten
         run: |
           cd $SRC_DIR
@@ -40,10 +62,12 @@ jobs:
           ./scripts/install-emscripten.sh
           source ./emsdk/emsdk_env.sh
 
+          # 持久化到后续 step
           echo "PATH=$PWD/emsdk:$PWD/emsdk/upstream/emscripten:$PATH" >> $GITHUB_ENV
           echo "EMSDK=$PWD/emsdk" >> $GITHUB_ENV
           echo "EM_CONFIG=$PWD/emsdk/.emscripten" >> $GITHUB_ENV
 
+      # 5. 编译 libheif
       - name: Build libheif WASM
         working-directory: ${{ env.SRC_DIR }}
         run: |
@@ -51,11 +75,13 @@ jobs:
           cd buildjs
           USE_TYPESCRIPT=1 USE_WASM=1 ../build-emscripten.sh ..
 
+      # 6. 打包产物
       - name: Package artifacts
         run: |
           cd $SRC_DIR/buildjs
           tar -czf libheif-wasm-${LATEST_VERSION}.tar.gz *
 
+      # 7. 上传 artifact
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
