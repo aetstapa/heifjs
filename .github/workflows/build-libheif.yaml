@@ -73,7 +73,7 @@ jobs:
         run: |
           mkdir -p buildjs
           cd buildjs
-          USE_TYPESCRIPT=1 USE_WASM=1 ../build-emscripten.sh ..
+          ENABLE_AOM=1 ENABLE_LIBDE265=1 USE_ES6=1 USE_TYPESCRIPT=1 USE_WASM=1 ../build-emscripten.sh ..
 
       # 6. 打包产物
       - name: Package artifacts
