@@ -1,0 +1,63 @@
+name: Build libheif WASM
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      LIBHEIF_VERSION: ""
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Get latest libheif release
+        id: get_release
+        run: |
+          if [ -z "$LIBHEIF_VERSION" ]; then
+            LATEST=$(curl -s https://api.github.com/repos/strukturag/libheif/releases/latest | jq -r .tag_name)
+          else
+            LATEST="$LIBHEIF_VERSION"
+          fi
+          echo "LATEST_VERSION=$LATEST" >> $GITHUB_ENV
+          echo "SRC_DIR=libheif-${LATEST_VERSION#v}" >> $GITHUB_ENV
+          echo "Latest libheif version: $LATEST"
+
+      - name: Download libheif source
+        run: |
+          VERSION=${LATEST_VERSION#v}
+          wget https://github.com/strukturag/libheif/releases/download/${LATEST_VERSION}/libheif-${VERSION}.tar.gz
+          tar -xzf libheif-${VERSION}.tar.gz
+
+      - name: Install Emscripten
+        run: |
+          cd $SRC_DIR
+          chmod +x ./scripts/install-emscripten.sh
+          ./scripts/install-emscripten.sh
+          source ./emsdk/emsdk_env.sh
+
+          echo "PATH=$PWD/emsdk:$PWD/emsdk/upstream/emscripten:$PATH" >> $GITHUB_ENV
+          echo "EMSDK=$PWD/emsdk" >> $GITHUB_ENV
+          echo "EM_CONFIG=$PWD/emsdk/.emscripten" >> $GITHUB_ENV
+
+      - name: Build libheif WASM
+        working-directory: ${{ env.SRC_DIR }}
+        run: |
+          mkdir -p buildjs
+          cd buildjs
+          USE_TYPESCRIPT=1 USE_WASM=1 ../build-emscripten.sh ..
+
+      - name: Package artifacts
+        run: |
+          cd $SRC_DIR/buildjs
+          tar -czf libheif-wasm-${LATEST_VERSION}.tar.gz *
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libheif-wasm
+          path: ${{ env.SRC_DIR }}/buildjs/libheif-wasm-${{ env.LATEST_VERSION }}.tar.gz
